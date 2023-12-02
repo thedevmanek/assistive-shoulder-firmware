@@ -32,7 +32,7 @@ for port ttyACM0
 # Good Practice
 The master branch is protected and requires all commits to be signed before merging.
 To sign commits follow this [article](https://docs.github.com/en/authentication/managing-commit-signature-verification/adding-a-gpg-key-to-your-github-account) by github.
-
+> Always **squash and merge**
 # Compliance
 > This project uses 2012 MISRA C Compliance all pull requests must follow it 
 > Document whenever necessary.
