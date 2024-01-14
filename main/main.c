@@ -1,4 +1,4 @@
-#include "nimble-ble-prph.h"
+#include "nimbleprph.h"
 
 void app_main(void)
 {
