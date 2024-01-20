@@ -18,16 +18,16 @@ jobs:
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
-
-      - name: Install ESP-IDF and Build project
-        uses: rmshub/esp-idf-action@v5
-        with: 
+    steps:
+       - name: Install ESP-IDF and Build project
+         uses: rmshub/esp-idf-action@v5
+         with: 
             esp_idf_version: v5.1.2
-            esp_idf_target: esp32c6
+            esp_idf_target: esp32
 
-      - name: Archive build output artifacts
-        uses: actions/upload-artifact@v3
-        with:
+       - name: Archive build output artifacts
+         uses: actions/upload-artifact@v3
+         with:
           name: build
           path: |
             build/bootloader/bootloader.bin
