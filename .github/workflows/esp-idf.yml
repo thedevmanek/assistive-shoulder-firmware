@@ -1,14 +1,35 @@
-            - name: Espressif IoT Development Framework (ESP-IDF)
-  # You may pin to the exact commit or the version.
-  # uses: espressif/esp-idf-ci-action@8cd22ae10042fadc37890e81e9988a9113e7b506
-  uses: espressif/esp-idf-ci-action@v1.1.0
-  with:
-    # Relative path under $GITHUB_WORKSPACE to place the repository
-    path: # optional, default is 
-    # Version of ESP-IDF docker image to use
-    esp_idf_version: # optional, default is latest
-    # ESP32 variant to build for
-    target: esp32c6
-    # Command to run inside the docker container (default: builds the project)
-    command: # optional, default is idf.py build
-          
+# This is a esp idf workflow to build ESP32 based project
+
+name: Build and Artifact the ESP-IDF Project
+
+# Controls when the action will run. 
+on:
+  # Triggers the workflow on tag create like v1.0, v2.0.0 and so on
+  push:
+    tags:
+     - 'v*'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+      - name: Install ESP-IDF and Build project
+        uses: rmshub/esp-idf-action@v5
+        with: 
+            esp_idf_version: v5.1.2
+            esp_idf_target: esp32c6
+
+      - name: Archive build output artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build
+          path: |
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/${{ github.event.repository.name }}.bin
