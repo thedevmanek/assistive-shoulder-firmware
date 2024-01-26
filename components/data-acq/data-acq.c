@@ -2,43 +2,12 @@
 #include <stdlib.h>
 #include <time.h>
 #include "cJSON.h"
+#include "imu-sensor.h"
 
-typedef struct {
-    float x;
-    float y;
-    float z;
-} axis;
 
-typedef struct {
-    axis accelerometer;
-    axis gyroscope;
-    axis magnetometer;
-    float muscleSensor;
-} IMUData;
-float generateRandomFloat(float min, float max) {
-    return min + ((float)rand() / RAND_MAX) * (max - min);
-}
+IMUData generateIMUData() {
+    IMUData data=getIMUValues();
 
-IMUData generateRandomIMUData() {
-    IMUData data;
-
-    // Generate random accelerometer data
-    data.accelerometer.x = generateRandomFloat(-10.0, 10.0);
-    data.accelerometer.y = generateRandomFloat(-10.0, 10.0);
-    data.accelerometer.z = generateRandomFloat(-10.0, 10.0);
-
-    // Generate random gyroscope data
-    data.gyroscope.x = generateRandomFloat(-5.0, 5.0);
-    data.gyroscope.y = generateRandomFloat(-5.0, 5.0);
-    data.gyroscope.z = generateRandomFloat(-5.0, 5.0);
-
-    // Generate random magnetometer data
-    data.magnetometer.x = generateRandomFloat(-2.0, 2.0);
-    data.magnetometer.y = generateRandomFloat(-2.0, 2.0);
-    data.magnetometer.z = generateRandomFloat(-2.0, 2.0);
-
-    // Generate random muscle sensor data
-    data.muscleSensor = generateRandomFloat(0.0, 100.0);
     return data;
 }
 
@@ -71,19 +40,13 @@ cJSON *imuDataToJson(const IMUData *data) {
 
 // Function to generate JSON string from IMUData
 char *generateJsonString() {
-    // Seed the random number generator with the current time
-    srand(time(NULL));
 
-    // Generate random IMUData
-    IMUData randomData = generateRandomIMUData();
+    IMUData randomData = generateIMUData();
 
-    // Convert IMUData to cJSON
     cJSON *jsonObj = imuDataToJson(&randomData);
 
-    // Dump cJSON to string
     char *jsonString = cJSON_Print(jsonObj);
 
-    // Free allocated memory
     cJSON_Delete(jsonObj);
 
     return jsonString;
