@@ -100,7 +100,7 @@ void imu_task(void *pvParameter) {
         values.accelerometer.y= (read_register_16(MPU6050_REG_ACCEL_XOUT + 2)) / 2048.0;
         values.accelerometer.z = (read_register_16(MPU6050_REG_ACCEL_XOUT + 4)) / 2048.0;
 
-        float gyro_scale=2000/32767;
+        float gyro_scale=2000/32767.0;
 // Read gyroscope data
         values.gyroscope.x= (read_register_16(MPU6050_REG_GYRO_XOUT) - gyro_offset_x) * gyro_scale;
         values.gyroscope.y = (read_register_16(MPU6050_REG_GYRO_XOUT + 2) - gyro_offset_y) * gyro_scale;
