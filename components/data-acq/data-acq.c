@@ -7,7 +7,6 @@
 
 IMUData generateIMUData() {
     IMUData data=getIMUValues();
-
     return data;
 }
 

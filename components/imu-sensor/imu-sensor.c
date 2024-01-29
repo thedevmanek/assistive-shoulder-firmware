@@ -5,7 +5,7 @@
 #include "driver/i2c.h"
 #include <math.h>
 #include "imu-sensor.h"
-
+#include "fusion-algorithm.h"
 
 #define ICM20948_ADDR_1            0x68
 #define ICM20948_ADDR_2            0x0C
@@ -38,7 +38,7 @@ void i2c_init() {
     i2c_driver_install(I2C_NUM_0, i2c_conf.mode, 0, 0, 0);
 }
 
-void write_register(uint8_t master_reg_address,uint8_t reg_address, uint8_t data) {
+void write_register(uint8_t master_reg_address, uint8_t reg_address, uint8_t data) {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, (master_reg_address << 1) | I2C_MASTER_WRITE, true);
@@ -49,7 +49,7 @@ void write_register(uint8_t master_reg_address,uint8_t reg_address, uint8_t data
     i2c_cmd_link_delete(cmd);
 }
 
-uint16_t read_register_16(uint8_t master_reg_address,uint8_t reg_address) {
+uint16_t read_register_16(uint8_t master_reg_address, uint8_t reg_address) {
     uint8_t data_h, data_l;
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
@@ -75,28 +75,61 @@ IMUData getIMUValues() {
 
 
 void imu_task(void *pvParameter) {
-    write_register(ICM20948_ADDR_1,ICM20948_REG_ACCEL_CONFIG, 0b00000000);
-    write_register(ICM20948_ADDR_1,ICM20948_REG_GYRO_CONFIG, 0b00000000);
+
+    float roll, pitch, yaw;
+    const float DEG_TO_RAD = 0.0174532925199433f; //PI/180.0f;
+    static float prevGyroX = 0.0;
+    static float prevGyroY = 0.0;
+    static float prevGyroZ = 0.0;
+    static float prevAccX = 0.0;
+    static float prevAccY = 0.0;
+    static float prevAccZ = 0.0;
 
     while (1) {
 // Read accelerometer data
         xSemaphoreTake(imuMutex, portMAX_DELAY);
-        values.accelerometer.x = (read_register_16(ICM20948_ADDR_1,ICM20948_REG_ACCEL_XOUT)) / 2048.0;
-        values.accelerometer.y = (read_register_16(ICM20948_ADDR_1,ICM20948_REG_ACCEL_XOUT + 2)) / 2048.0;
-        values.accelerometer.z = (read_register_16(ICM20948_ADDR_1,ICM20948_REG_ACCEL_XOUT + 4)) / 2048.0;
+        values.accelerometer.x = (read_register_16(ICM20948_ADDR_1, ICM20948_REG_ACCEL_XOUT)) / 2048.0;
+        values.accelerometer.y = (read_register_16(ICM20948_ADDR_1, ICM20948_REG_ACCEL_XOUT + 2)) / 2048.0;
+        values.accelerometer.z = (read_register_16(ICM20948_ADDR_1, ICM20948_REG_ACCEL_XOUT + 4)) / 2048.0;
 
-        float gyro_scale = 250 / 32767.0;
+
+        values.accelerometer.x = values.accelerometer.x - prevAccX;
+        values.accelerometer.y = values.accelerometer.y - prevAccY;
+        values.accelerometer.z = values.accelerometer.z - prevAccZ;
+
+
+        prevAccX = values.accelerometer.x;
+        prevAccY = values.accelerometer.y;
+        prevAccZ = values.accelerometer.z;
+//        float gyro_scale = 250 / 32767.0;
 // Read gyroscope data
-        values.gyroscope.x = read_register_16(ICM20948_ADDR_1,ICM20948_REG_GYRO_XOUT)*gyro_scale;
-        values.gyroscope.y = read_register_16(ICM20948_ADDR_1,ICM20948_REG_GYRO_XOUT + 2)*gyro_scale;
-        values.gyroscope.z = read_register_16(ICM20948_ADDR_1,ICM20948_REG_GYRO_XOUT + 4)*gyro_scale ;
-        values.magnetometer.x = read_register_16(ICM20948_ADDR_2,ICM20948_REG_MAG_XOUT);
-        values.magnetometer.y = read_register_16(ICM20948_ADDR_2,ICM20948_REG_MAG_XOUT+2);
-        values.magnetometer.z = read_register_16(ICM20948_ADDR_2,ICM20948_REG_MAG_XOUT+4);
-        printf("Accelerometer: X=%.2f, Y=%.2f, Z=%.2f\n", values.accelerometer.x, values.accelerometer.y, values.accelerometer.z);
+        values.gyroscope.x = read_register_16(ICM20948_ADDR_1, ICM20948_REG_GYRO_XOUT) * DEG_TO_RAD;
+        values.gyroscope.y = read_register_16(ICM20948_ADDR_1, ICM20948_REG_GYRO_XOUT + 2) * DEG_TO_RAD;
+        values.gyroscope.z = read_register_16(ICM20948_ADDR_1, ICM20948_REG_GYRO_XOUT + 4) * DEG_TO_RAD;
+        values.magnetometer.x = read_register_16(ICM20948_ADDR_2, ICM20948_REG_MAG_XOUT);
+        values.magnetometer.y = read_register_16(ICM20948_ADDR_2, ICM20948_REG_MAG_XOUT + 2);
+        values.magnetometer.z = read_register_16(ICM20948_ADDR_2, ICM20948_REG_MAG_XOUT + 4);
+        // Calculate average gyroscope values
+        values.gyroscope.x = (prevGyroX + values.gyroscope.x) / 2.0;
+        values.gyroscope.y = (prevGyroY + values.gyroscope.y) / 2.0;
+        values.gyroscope.z = (prevGyroZ + values.gyroscope.z) / 2.0;
+
+// Update previous gyroscope values for the next iteration
+        prevGyroX = values.gyroscope.x;
+        prevGyroY = values.gyroscope.y;
+        prevGyroZ = values.gyroscope.z;
+        float deltat = deltatUpdate();
+        MadgwickUpdate(values.gyroscope.x, values.gyroscope.y, values.gyroscope.z, values.accelerometer.x,
+                       values.accelerometer.y, values.accelerometer.z, values.magnetometer.x, values.magnetometer.y,
+                       values.magnetometer.z, deltat);
+        pitch = getPitch();
+        roll = getRoll();    //you could also use getRollRadians() ecc
+        yaw = getYaw();
+        printf("Accelerometer: X=%.2f, Y=%.2f, Z=%.2f\n", values.accelerometer.x, values.accelerometer.y,
+               values.accelerometer.z);
         printf("Gyroscope: X=%.2f, Y=%.2f, Z=%.2f\n", values.gyroscope.x, values.gyroscope.y, values.gyroscope.z);
         printf("Magnetometer: X=%f, Y=%f, Z=%f\n", values.magnetometer.x, values.magnetometer.y, values.magnetometer.z);
-
+        printf("Roll= %lf,Pitch= %lf,Yaw= %lf\n", roll, pitch, yaw);
         xSemaphoreGive(imuMutex);
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);  // Delay for 1 second
@@ -110,8 +143,11 @@ void init_imu() {
     i2c_init();
 
     // Write value 40 to register 0x06
-    write_register(ICM20948_ADDR_1,PWR_MGMT_1, 40);
-    write_register(ICM20948_ADDR_2,MAGNET_MODE, 4);
+    write_register(ICM20948_ADDR_1, 0x7F, 0b00000000);
+    write_register(ICM20948_ADDR_1, PWR_MGMT_1, 0b0000000);
+    write_register(ICM20948_ADDR_2, MAGNET_MODE, 0b00000100);
+    write_register(ICM20948_ADDR_1, ICM20948_REG_ACCEL_CONFIG, 0b00000000);
+    write_register(ICM20948_ADDR_1, ICM20948_REG_GYRO_CONFIG, 0b00000000);
     // Create and start the IMU task
     xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
 }
