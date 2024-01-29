@@ -3,6 +3,6 @@
 void app_main(void)
 {
     init_imu();
-    init_ble();
+//    init_ble();
 
 }

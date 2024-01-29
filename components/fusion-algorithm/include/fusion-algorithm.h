@@ -1,0 +1,1 @@
+write_register(ICM20948_ADDR_1,PWR_MGMT_1, 40);
