@@ -12,6 +12,7 @@ typedef struct {
     axis accelerometer;
     axis gyroscope;
     axis magnetometer;
+    axis rpy;
     float muscleSensor;
 } IMUData;
 

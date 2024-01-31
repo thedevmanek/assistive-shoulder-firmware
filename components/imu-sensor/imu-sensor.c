@@ -5,14 +5,14 @@
 #include "driver/i2c.h"
 #include <math.h>
 #include "imu-sensor.h"
-#include "fusion-algorithm.h"
+#include "Fusion.h"
 
 #define ICM20948_ADDR_1            0x68
 #define ICM20948_ADDR_2            0x0C
 #define PWR_MGMT_1 0x06
 #define MAGNET_MODE 0x31
 #define ICM20948_REG_ACCEL_CONFIG 0x14
-#define ICM20948_REG_GYRO_CONFIG 0x02
+#define ICM20948_REG_GYRO_CONFIG 0x01
 #define ICM20948_REG_ACCEL_XOUT  0x2D
 #define ICM20948_REG_TEMP_OUT    0x39
 #define ICM20948_REG_GYRO_XOUT   0x33
@@ -20,6 +20,7 @@
 #define SDA_PIN 5
 #define SCL_PIN 6
 
+#define SAMPLE_RATE (100000) // replace this with actual sample rate
 
 SemaphoreHandle_t imuMutex;
 IMUData values;
@@ -76,78 +77,63 @@ IMUData getIMUValues() {
 
 void imu_task(void *pvParameter) {
 
-    float roll, pitch, yaw;
-    const float DEG_TO_RAD = 0.0174532925199433f; //PI/180.0f;
-    static float prevGyroX = 0.0;
-    static float prevGyroY = 0.0;
-    static float prevGyroZ = 0.0;
-    static float prevAccX = 0.0;
-    static float prevAccY = 0.0;
-    static float prevAccZ = 0.0;
+
+    FusionAhrs ahrs;
+    FusionAhrsInitialise(&ahrs);
 
     while (1) {
+
 // Read accelerometer data
         xSemaphoreTake(imuMutex, portMAX_DELAY);
-        values.accelerometer.x = (read_register_16(ICM20948_ADDR_1, ICM20948_REG_ACCEL_XOUT)) / 2048.0;
-        values.accelerometer.y = (read_register_16(ICM20948_ADDR_1, ICM20948_REG_ACCEL_XOUT + 2)) / 2048.0;
-        values.accelerometer.z = (read_register_16(ICM20948_ADDR_1, ICM20948_REG_ACCEL_XOUT + 4)) / 2048.0;
+        write_register(ICM20948_ADDR_1, ICM20948_REG_ACCEL_CONFIG, 0b00000111);
+        write_register(ICM20948_ADDR_1, ICM20948_REG_GYRO_CONFIG,  0b00000011);
 
+        values.accelerometer.x = (read_register_16(ICM20948_ADDR_1, ICM20948_REG_ACCEL_XOUT))/2048.0;
+        values.accelerometer.y = (read_register_16(ICM20948_ADDR_1, ICM20948_REG_ACCEL_XOUT + 2))/2048.0;
+        values.accelerometer.z = (read_register_16(ICM20948_ADDR_1, ICM20948_REG_ACCEL_XOUT + 4))/2048.0;
 
-        values.accelerometer.x = values.accelerometer.x - prevAccX;
-        values.accelerometer.y = values.accelerometer.y - prevAccY;
-        values.accelerometer.z = values.accelerometer.z - prevAccZ;
+        float gyro_normalize=2000/32768.0;
+        values.gyroscope.x = read_register_16(ICM20948_ADDR_1, ICM20948_REG_GYRO_XOUT)*gyro_normalize ;
+        values.gyroscope.y = read_register_16(ICM20948_ADDR_1, ICM20948_REG_GYRO_XOUT + 2)*gyro_normalize ;
+        values.gyroscope.z = read_register_16(ICM20948_ADDR_1, ICM20948_REG_GYRO_XOUT + 4)*gyro_normalize ;
 
+        write_register(ICM20948_ADDR_1, 0x03,  0b00000000);
+        write_register(ICM20948_ADDR_1, 0x03,  0b00000010);
+        write_register(ICM20948_ADDR_2, MAGNET_MODE, 0b00001000);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
 
-        prevAccX = values.accelerometer.x;
-        prevAccY = values.accelerometer.y;
-        prevAccZ = values.accelerometer.z;
-//        float gyro_scale = 250 / 32767.0;
-// Read gyroscope data
-        values.gyroscope.x = read_register_16(ICM20948_ADDR_1, ICM20948_REG_GYRO_XOUT) * DEG_TO_RAD;
-        values.gyroscope.y = read_register_16(ICM20948_ADDR_1, ICM20948_REG_GYRO_XOUT + 2) * DEG_TO_RAD;
-        values.gyroscope.z = read_register_16(ICM20948_ADDR_1, ICM20948_REG_GYRO_XOUT + 4) * DEG_TO_RAD;
         values.magnetometer.x = read_register_16(ICM20948_ADDR_2, ICM20948_REG_MAG_XOUT);
         values.magnetometer.y = read_register_16(ICM20948_ADDR_2, ICM20948_REG_MAG_XOUT + 2);
         values.magnetometer.z = read_register_16(ICM20948_ADDR_2, ICM20948_REG_MAG_XOUT + 4);
-        // Calculate average gyroscope values
-        values.gyroscope.x = (prevGyroX + values.gyroscope.x) / 2.0;
-        values.gyroscope.y = (prevGyroY + values.gyroscope.y) / 2.0;
-        values.gyroscope.z = (prevGyroZ + values.gyroscope.z) / 2.0;
 
-// Update previous gyroscope values for the next iteration
-        prevGyroX = values.gyroscope.x;
-        prevGyroY = values.gyroscope.y;
-        prevGyroZ = values.gyroscope.z;
-        float deltat = deltatUpdate();
-        MadgwickUpdate(values.gyroscope.x, values.gyroscope.y, values.gyroscope.z, values.accelerometer.x,
-                       values.accelerometer.y, values.accelerometer.z, values.magnetometer.x, values.magnetometer.y,
-                       values.magnetometer.z, deltat);
-        pitch = getPitch();
-        roll = getRoll();    //you could also use getRollRadians() ecc
-        yaw = getYaw();
+
+        vTaskDelay(250 / portTICK_PERIOD_MS);
+        const FusionVector gyroscope = {{values.gyroscope.x, values.gyroscope.y, values.gyroscope.z}};
+        const FusionVector accelerometer = {{values.accelerometer.x, values.accelerometer.y, values.accelerometer.z}};
+        const FusionVector magnetometer = {{values.magnetometer.x, values.magnetometer.y, values.magnetometer.z}};
+
+        FusionAhrsUpdate(&ahrs, gyroscope, accelerometer,magnetometer, 0.01f);
+
+        const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+
+        printf("Roll= %lf,Pitch= %lf,Yaw= %lf\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
+        values.rpy.x=euler.angle.roll;
+        values.rpy.y=euler.angle.pitch;
+        values.rpy.z=euler.angle.yaw;
         printf("Accelerometer: X=%.2f, Y=%.2f, Z=%.2f\n", values.accelerometer.x, values.accelerometer.y,
                values.accelerometer.z);
         printf("Gyroscope: X=%.2f, Y=%.2f, Z=%.2f\n", values.gyroscope.x, values.gyroscope.y, values.gyroscope.z);
         printf("Magnetometer: X=%f, Y=%f, Z=%f\n", values.magnetometer.x, values.magnetometer.y, values.magnetometer.z);
-        printf("Roll= %lf,Pitch= %lf,Yaw= %lf\n", roll, pitch, yaw);
         xSemaphoreGive(imuMutex);
 
-        vTaskDelay(1000 / portTICK_PERIOD_MS);  // Delay for 1 second
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
 void init_imu() {
     // Initialize I2C
     imuMutex = xSemaphoreCreateMutex();
-
     i2c_init();
-
-    // Write value 40 to register 0x06
-    write_register(ICM20948_ADDR_1, 0x7F, 0b00000000);
-    write_register(ICM20948_ADDR_1, PWR_MGMT_1, 0b0000000);
-    write_register(ICM20948_ADDR_2, MAGNET_MODE, 0b00000100);
-    write_register(ICM20948_ADDR_1, ICM20948_REG_ACCEL_CONFIG, 0b00000000);
-    write_register(ICM20948_ADDR_1, ICM20948_REG_GYRO_CONFIG, 0b00000000);
-    // Create and start the IMU task
+    write_register(ICM20948_ADDR_1, PWR_MGMT_1, 0b0000001);
     xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
 }
