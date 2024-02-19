@@ -1,5 +1,3 @@
-
-
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -15,7 +13,11 @@
 #include "services/gatt/ble_svc_gatt.h"
 #include "bleprph.h"
 #include "nimbleprph.h"
-#include "data-acq.h"
+#include <stdlib.h>
+#include <time.h>
+#include "cJSON.h"
+#include "imu-sensor.h"
+
 //@______________________Declare some variables____________________________
 esp_err_t ret;
 static const char *tag = "NimBLE_BLE";
@@ -54,7 +56,40 @@ static void bleprph_on_reset(int reason);
 void bleprph_host_task(void *param);
 static void bleprph_on_sync(void);
 //@___________________________Heart of nimble code _________________________________________
+//-------------------data acq-------------
 
+IMUData generateIMUData() {
+    IMUData data=getIMUValues();
+    return data;
+}
+
+// Function to create cJSON object from IMUData
+cJSON *imuDataToJson(const IMUData *data) {
+    cJSON *jsonObj = cJSON_CreateObject();
+    cJSON *rpy = cJSON_CreateObject();
+    cJSON_AddItemToObject(rpy, "roll", cJSON_CreateNumber(data->rpy.x));
+    cJSON_AddItemToObject(rpy, "pitch", cJSON_CreateNumber(data->rpy.y));
+    cJSON_AddItemToObject(rpy, "yaw", cJSON_CreateNumber(data->rpy.z));
+    cJSON_AddItemToObject(jsonObj, "rpy", rpy);
+    cJSON_AddItemToObject(jsonObj, "muscleSensor", cJSON_CreateNumber(data->muscleSensor));
+
+    return jsonObj;
+}
+
+// Function to generate JSON string from IMUData
+char *generateJsonString() {
+
+    IMUData randomData = generateIMUData();
+
+    cJSON *jsonObj = imuDataToJson(&randomData);
+
+    char *jsonString = cJSON_Print(jsonObj);
+
+    cJSON_Delete(jsonObj);
+
+    return jsonString;
+}
+//---------------------------------------
 static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
 	{
 
