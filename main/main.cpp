@@ -1,8 +1,15 @@
+extern "C" {
 #include "nimbleprph.h"
+}
+
 #include "imu-sensor.h"
-void app_main(void)
+
+
+extern "C"
 {
+void app_main(void) {
     init_imu();
     init_ble();
 
+}
 }

@@ -3,9 +3,9 @@
 #include "freertos/semphr.h"
 
 typedef struct {
-    float x;
-    float y;
-    float z;
+    int16_t x;
+    int16_t y;
+    int16_t z;
 } axis;
 
 typedef struct {
@@ -17,5 +17,12 @@ typedef struct {
 } IMUData;
 
 void init_imu();
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 IMUData getIMUValues();
+
+#ifdef __cplusplus
+}
+#endif
