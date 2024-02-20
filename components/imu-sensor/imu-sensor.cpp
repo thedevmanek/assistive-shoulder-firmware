@@ -91,29 +91,36 @@ static void mpuTask(void*)
         mpud::raw_axes_t rawGyro;      // holds x, y, z axes as int16
         MPU.acceleration(&rawAccel);  // fetch raw data from the registers
         MPU.rotation(&rawGyro);       // fetch raw data from the registers
-
-        const FusionVector accelerometer = {{(float)rawAccel.x, (float)rawAccel.y,(float) rawAccel.z}};
-        const FusionVector gyroscope = {{(float)rawGyro.x, (float)rawGyro.y,(float) rawGyro.z}};
-
-        FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.01f);
-        const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
-        (void)printf("Roll= %lf,Pitch= %lf,Yaw= %lf\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
-        (void)printf("Gyroscope: X=%d, Y=%d, Z=%d\n", rawGyro.x, rawGyro.y, rawGyro.z);
-        (void)printf("Accelerometer: X=%d, Y=%d, Z=%d\n", rawAccel.x, rawAccel.y,
-               rawAccel.z);
-
+        constexpr double kRadToDeg = 57.2957795131;
+        constexpr float kDeltaTime = 1.f / kSampleRate;
+        float gyroRoll             = roll + mpud::math::gyroDegPerSec(rawGyro.x, mpud::GYRO_FS_500DPS) * kDeltaTime;
+        float gyroPitch            = pitch + mpud::math::gyroDegPerSec(rawGyro.y, mpud::GYRO_FS_500DPS) * kDeltaTime;
+        float gyroYaw              = yaw + mpud::math::gyroDegPerSec(rawGyro.z, mpud::GYRO_FS_500DPS) * kDeltaTime;
+        float accelRoll            = atan2(-rawAccel.x, rawAccel.z) * kRadToDeg;
+        float accelPitch = atan2(rawAccel.y, sqrt(rawAccel.x * rawAccel.x + rawAccel.z * rawAccel.z)) * kRadToDeg;
+        // Fusion
+        roll  = gyroRoll * 0.95f + accelRoll * 0.05f;
+        pitch = gyroPitch * 0.95f + accelPitch * 0.05f;
+        yaw   = gyroYaw;
+        // correct yaw
+        if (yaw > 180.f)
+            yaw -= 360.f;
+        else if (yaw < -180.f)
+            yaw += 360.f;
         values.accelerometer.x=rawAccel.x;
         values.accelerometer.y=rawAccel.y;
         values.accelerometer.z=rawAccel.z;
         values.gyroscope.x=rawGyro.x;
         values.gyroscope.y=rawGyro.y;
         values.gyroscope.z=rawGyro.z;
-        values.rpy.x=euler.angle.roll;
-        values.rpy.y=euler.angle.pitch;
-        values.rpy.z=euler.angle.yaw;
-
+        values.rpy.x=pitch;
+        values.rpy.y=roll;
+        values.rpy.z=yaw;
+        (void)printf("Roll= %lf,Pitch= %lf,Yaw= %lf\n", pitch, roll, yaw);
+        (void)printf("Gyroscope: X=%d, Y=%d, Z=%d\n", rawGyro.x, rawGyro.y, rawGyro.z);
+        (void)printf("Accelerometer: X=%d, Y=%d, Z=%d\n", rawAccel.x, rawAccel.y,rawAccel.z);
         xSemaphoreGive(imuMutex);
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     vTaskDelete(nullptr);
 }
