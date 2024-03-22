@@ -37,7 +37,8 @@ static const ble_uuid128_t gatt_svr_chr_uuid =
 	BLE_UUID128_INIT(0x02, 0x00, 0x12, 0xac, 0x42, 0x02, 0x78, 0xb8, 0xed, 0x11, 0xde, 0x46, 0x76, 0x9c, 0xaf, 0xc9);
 //@_____Some variables used in service and characteristic declaration______
 char characteristic_value[50] = "test characteristic"; //!! When client read characteristic, he get this value. You can also set this value in your code.
-char characteristic_received_value[500];					 //!! When client write to characteristic , he set value of this. You can read it in code.
+					 //!! When client write to characteristic , he set value of this. You can read it in code.
+
 
 uint16_t min_length = 1;   //!! minimum length the client can write to a characterstic
 uint16_t max_length = 700; //!! maximum length the client can write to a characterstic
@@ -125,16 +126,34 @@ static int gatt_svr_chr_access(uint16_t conn_handle, uint16_t attr_handle,
 							sizeof characteristic_value);
 		return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 
-	case BLE_GATT_ACCESS_OP_WRITE_CHR:																	 //!! In case user accessed this characterstic to write, bellow lines will executed.
+	case BLE_GATT_ACCESS_OP_WRITE_CHR:
+        char characteristic_received_value[10000];//!! In case user accessed this characterstic to write, bellow lines will executed.
 		rc = gatt_svr_chr_write(ctxt->om, min_length, max_length, &characteristic_received_value, NULL); //!! Function "gatt_svr_chr_write" will fire.
 		printf("Received=%s\n", characteristic_received_value);											 // Print the received value
 		//! Use received value in you code. For example
-		char stp[] = "stop";
-		int x = strcmp(characteristic_received_value, stp);
-		if (x == 0)
+		char tgl[] = "toggle";
+
+		if (strcmp(characteristic_received_value, tgl) == 0)
 		{
-			stopBLE();
-		}
+			AUTO_OVERRIDE=!AUTO_OVERRIDE;
+            memset(characteristic_received_value, 0, 255);
+
+
+
+        }
+            if(strcmp(characteristic_received_value, "up")==0){
+                strcpy(man_direct,"up");
+
+                memset(characteristic_received_value, 0, 255);
+
+
+            }
+            else if(strcmp(characteristic_received_value, "down")==0){
+                strcpy(man_direct,"down");
+                memset(characteristic_received_value, 0, 255);
+
+            }
+
 
 		return rc;
 	default:

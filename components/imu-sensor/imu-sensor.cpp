@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <string.h>
 #include "driver/gpio.h"
 #include "driver/i2c.h"
 #include "driver/spi_master.h"
@@ -51,10 +51,11 @@ static const char *TAG = "imu";
 
 static void mpuTask(void *);
 
-            float setPoint = 20;
-float Kp= 15;
-float Kd=5;
-float Ki=0.01;
+float setPoint = 20;
+float newSetPoint=70;
+float Kp = 15;
+float Kd = 5;
+float Ki = 0.01;
 uint8_t check = 0;
 uint16_t count = 0;
 double input, output, error, lastError, integral, derivative;
@@ -62,9 +63,14 @@ int PumpValue;
 
 static MPU_t MPU;
 float roll{0}, pitch{0}, yaw{0};
-float temp_roll=0;
+float temp_roll = 0;
+
+bool AUTO_OVERRIDE;
+char man_direct[] = "none";
+
 // Main
 void init_imu() {
+
     imuMutex = xSemaphoreCreateMutex();
     fflush(stdout);
     // Initialize bus through either the Library API or esp-idf API
@@ -74,18 +80,13 @@ void init_imu() {
     xTaskCreate(mpuTask, "mpuTask", 4 * 1024, nullptr, 6, nullptr);
 }
 
-void arm_check(void)
-{
-    if( roll > -80)
-    {
-        if(check == 0)
-            check=1;
-    }
-    else if(roll <-85)
-    {
-        if(check == 1)
-        {
-            check=0;
+void arm_check(void) {
+    if (roll > -80) {
+        if (check == 0)
+            check = 1;
+    } else if (roll < -85) {
+        if (check == 1) {
+            check = 0;
             count++;
         }
     }
@@ -100,10 +101,13 @@ void adjustPump(void) {
     derivative = error - lastError;
 
     output = Kp * error + Ki * integral + Kd * derivative;
-    printf("Output:-%f\n",output);
+    printf("Output:-%f\n", output);
 
-    if (output > 255) output = 1    ;
-    else if (output < 0) output = 0;
+    if (output > 255) output = 1;
+    else if (output < 0){
+        output = 0;
+        count=0;
+    }
 
 
     esp_rom_gpio_pad_select_gpio(PUMP);
@@ -174,16 +178,38 @@ static void mpuTask(void *) {
         values.rpy.x = pitch;
         values.rpy.y = roll;
         values.rpy.z = yaw;
-        temp_roll=(temp_roll+roll)/2;
-        (void) printf("Roll= %lf,Pitch= %lf,Yaw= %lf\n", temp_roll, pitch, yaw);
-        (void) printf("Gyroscope: X=%d, Y=%d, Z=%d\n", rawGyro.x, rawGyro.y, rawGyro.z);
-        (void) printf("Accelerometer: X=%d, Y=%d, Z=%d\n", rawAccel.x, rawAccel.y, rawAccel.z);
+        temp_roll = (temp_roll + roll) / 2;
+//        (void) printf("Roll= %lf,Pitch= %lf,Yaw= %lf\n", temp_roll, pitch, yaw);
+//        (void) printf("Gyroscope: X=%d, Y=%d, Z=%d\n", rawGyro.x, rawGyro.y, rawGyro.z);
+//        (void) printf("Accelerometer: X=%d, Y=%d, Z=%d\n", rawAccel.x, rawAccel.y, rawAccel.z);
         xSemaphoreGive(imuMutex);
         arm_check();
-        printf("Count:-%d\n",count);
-        if(count>3){
-            printf("Trigger");
+
+//        printf("Set Point:-%f\n", setPoint);
+//        printf("Man:-%s\n", man_direct);
+
+        if (AUTO_OVERRIDE) {
+            if (strcmp(man_direct, "up") == 0) {
+                newSetPoint = newSetPoint - 10;
+                strcpy(man_direct, "none");
+//                printf("UP\n");
+            } else if (strcmp(man_direct, "down") == 0) {
+                newSetPoint = newSetPoint + 10;
+                strcpy(man_direct, "none");
+//                printf("DOWN\n");
+
+
+            }
+            setPoint = newSetPoint;
             adjustPump();
+
+        } else {
+            setPoint = 20;
+//            printf("Count:-%d\n",count);
+            if (count > 3) {
+                adjustPump();
+
+            }
         }
 
         vTaskDelay(10 / portTICK_PERIOD_MS);
