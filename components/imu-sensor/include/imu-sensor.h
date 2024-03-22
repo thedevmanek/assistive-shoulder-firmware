@@ -22,7 +22,8 @@ extern "C" {
 #endif
 
 IMUData getIMUValues();
-
+extern  bool AUTO_OVERRIDE;
+extern  char man_direct[];
 #ifdef __cplusplus
 }
 #endif
