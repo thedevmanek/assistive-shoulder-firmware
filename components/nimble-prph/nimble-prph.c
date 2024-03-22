@@ -152,11 +152,11 @@ void vTasksendNotification() //! For sending notifications periodically as freet
 		if (notify_state) //!! This value is checked so that we don't send notifications if no one has subscribed to our notification handle.
 		{
             char *jsonString= generateJsonString();
-            printf("Generated JSON:\n%s\n", jsonString);
+//            printf("Generated JSON:\n%s\n", jsonString);
                 om = ble_hs_mbuf_from_flat(jsonString, strlen(jsonString));
 			rc = ble_gattc_notify_custom(conn_handle, notification_handle, om);
-            printf("\n data size=%d\n", strlen(jsonString));
-			printf("\n rc=%d\n", rc);
+//            printf("\n data size=%d\n", strlen(jsonString));
+//			printf("\n rc=%d\n", rc);
             free(jsonString);
 
 			if (rc != 0)
